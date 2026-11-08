@@ -1,0 +1,208 @@
+@page "/estudiantes"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Estudiantes</PageTitle>
+
+<h1>Estudiantes</h1>
+<p class="text-muted">Actividad 17 — CRUD con Entity Framework Core y SQL Server.</p>
+
+@* ---------- FORMULARIO: CREAR / ACTUALIZAR ---------- *@
+<div class="card mb-4">
+    <div class="card-header">
+        @(estudianteActual.Id == 0 ? "Nuevo estudiante" : $"Editando estudiante #{estudianteActual.Id}")
+    </div>
+    <div class="card-body">
+        <EditForm Model="estudianteActual" OnValidSubmit="Guardar" FormName="formEstudiante">
+            <DataAnnotationsValidator />
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Matrícula</label>
+                    <InputText class="form-control" @bind-Value="estudianteActual.Matricula" />
+                    <ValidationMessage For="() => estudianteActual.Matricula" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Nombre</label>
+                    <InputText class="form-control" @bind-Value="estudianteActual.Nombre" />
+                    <ValidationMessage For="() => estudianteActual.Nombre" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Apellidos</label>
+                    <InputText class="form-control" @bind-Value="estudianteActual.Apellidos" />
+                    <ValidationMessage For="() => estudianteActual.Apellidos" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Correo</label>
+                    <InputText class="form-control" @bind-Value="estudianteActual.Correo" />
+                    <ValidationMessage For="() => estudianteActual.Correo" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Carrera</label>
+                    <InputText class="form-control" @bind-Value="estudianteActual.Carrera" />
+                    <ValidationMessage For="() => estudianteActual.Carrera" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Semestre</label>
+                    <InputNumber class="form-control" @bind-Value="estudianteActual.Semestre" />
+                    <ValidationMessage For="() => estudianteActual.Semestre" />
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary">
+                    @(estudianteActual.Id == 0 ? "Agregar" : "Guardar cambios")
+                </button>
+                @if (estudianteActual.Id != 0)
+                {
+                    <button type="button" class="btn btn-secondary ms-2" @onclick="Cancelar">Cancelar</button>
+                }
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(mensaje))
+{
+    <div class="alert @(esError ? "alert-danger" : "alert-success")">@mensaje</div>
+}
+
+@* ---------- TABLA: LEER / ELIMINAR ---------- *@
+@if (estudiantes is null)
+{
+    <p><em>Cargando...</em></p>
+}
+else if (estudiantes.Count == 0)
+{
+    <p>No hay estudiantes registrados.</p>
+}
+else
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Matrícula</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Carrera</th>
+                <th>Semestre</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in estudiantes)
+            {
+                <tr>
+                    <td>@e.Id</td>
+                    <td>@e.Matricula</td>
+                    <td>@e.Nombre @e.Apellidos</td>
+                    <td>@e.Correo</td>
+                    <td>@e.Carrera</td>
+                    <td>@e.Semestre</td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(e)">Editar</button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => Eliminar(e.Id)">Eliminar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Estudiante>? estudiantes;
+    private Estudiante estudianteActual = new();
+    private string? mensaje;
+    private bool esError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarEstudiantes();
+    }
+
+    // READ: leer todos los estudiantes de la base de datos
+    private async Task CargarEstudiantes()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        estudiantes = await db.Estudiantes
+            .AsNoTracking()
+            .OrderBy(e => e.Apellidos)
+            .ToListAsync();
+    }
+
+    // CREATE / UPDATE: si Id es 0 se inserta, si no se actualiza
+    private async Task Guardar()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            if (estudianteActual.Id == 0)
+            {
+                db.Estudiantes.Add(estudianteActual);
+                MostrarMensaje("Estudiante agregado.");
+            }
+            else
+            {
+                db.Estudiantes.Update(estudianteActual);
+                MostrarMensaje("Estudiante actualizado.");
+            }
+
+            await db.SaveChangesAsync();
+            estudianteActual = new();
+            await CargarEstudiantes();
+        }
+        catch (DbUpdateException)
+        {
+            MostrarMensaje("No se pudo guardar. ¿La matrícula ya existe?", true);
+        }
+    }
+
+    // Cargar los datos de un estudiante en el formulario para editarlo
+    private void Editar(Estudiante e)
+    {
+        // Copia para no modificar la fila de la tabla hasta guardar
+        estudianteActual = new Estudiante
+        {
+            Id = e.Id,
+            Matricula = e.Matricula,
+            Nombre = e.Nombre,
+            Apellidos = e.Apellidos,
+            Correo = e.Correo,
+            Carrera = e.Carrera,
+            Semestre = e.Semestre
+        };
+        mensaje = null;
+    }
+
+    private void Cancelar()
+    {
+        estudianteActual = new();
+        mensaje = null;
+    }
+
+    // DELETE: eliminar un estudiante por su Id
+    private async Task Eliminar(int id)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var estudiante = await db.Estudiantes.FindAsync(id);
+        if (estudiante is not null)
+        {
+            db.Estudiantes.Remove(estudiante);
+            await db.SaveChangesAsync();
+            MostrarMensaje("Estudiante eliminado.");
+        }
+
+        if (estudianteActual.Id == id)
+        {
+            estudianteActual = new();
+        }
+        await CargarEstudiantes();
+    }
+
+    private void MostrarMensaje(string texto, bool error = false)
+    {
+        mensaje = texto;
+        esError = error;
+    }
+}
